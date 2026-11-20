@@ -1,0 +1,200 @@
+/*
+ * Request Demo form styles.
+ * All classes are prefixed with "rdf-" so they won't clash with your site's CSS.
+ * Change the variables below to match your brand.
+ */
+.rdf-card {
+  --rdf-primary: #4f46e5;
+  --rdf-primary-hover: #4338ca;
+  --rdf-text: #1f2937;
+  --rdf-muted: #6b7280;
+  --rdf-border: #d1d5db;
+  --rdf-error: #dc2626;
+  --rdf-radius: 10px;
+
+  width: 100%;
+  max-width: 480px;
+  padding: 32px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 12px 32px rgba(16, 24, 40, 0.08);
+  color: var(--rdf-text);
+}
+
+.rdf-title {
+  margin: 0 0 20px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.rdf-subtitle {
+  margin: 0 0 24px;
+  color: var(--rdf-muted);
+  line-height: 1.5;
+}
+
+.rdf-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rdf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rdf-input {
+  width: 100%;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--rdf-text);
+  background: #fff;
+  border: 1px solid var(--rdf-border);
+  border-radius: var(--rdf-radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.rdf-input::placeholder {
+  color: var(--rdf-muted);
+}
+
+.rdf-input:focus {
+  outline: none;
+  border-color: var(--rdf-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+}
+
+.rdf-input:disabled {
+  background: #f9fafb;
+  cursor: not-allowed;
+}
+
+.rdf-textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.rdf-field--error .rdf-input {
+  border-color: var(--rdf-error);
+}
+
+.rdf-field--error .rdf-input:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+.rdf-error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--rdf-error);
+}
+
+.rdf-banner {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--rdf-radius);
+}
+
+.rdf-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px 20px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--rdf-primary);
+  border: none;
+  border-radius: var(--rdf-radius);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.05s;
+}
+
+.rdf-button:hover:not(:disabled) {
+  background: var(--rdf-primary-hover);
+}
+
+.rdf-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.rdf-button:focus-visible {
+  outline: 3px solid rgba(79, 70, 229, 0.35);
+  outline-offset: 2px;
+}
+
+.rdf-button:disabled {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+.rdf-button--ghost {
+  color: var(--rdf-primary);
+  background: transparent;
+  border: 1px solid var(--rdf-border);
+}
+
+.rdf-button--ghost:hover:not(:disabled) {
+  background: #f5f5ff;
+}
+
+.rdf-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: rdf-spin 0.7s linear infinite;
+}
+
+@keyframes rdf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rdf-honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.rdf-success {
+  text-align: center;
+}
+
+.rdf-success .rdf-title {
+  margin-bottom: 6px;
+}
+
+.rdf-success-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #16a34a;
+  background: #dcfce7;
+  border-radius: 50%;
+}
+
+@media (max-width: 560px) {
+  .rdf-card {
+    padding: 24px 20px;
+  }
+}
