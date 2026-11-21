@@ -1,19 +1,27 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./RequestDemoForm.css";
 
 /**
- * Where submissions are sent.
- * Set REACT_APP_FORM_ENDPOINT in a .env file (see .env.example).
- * If it's not set, the form simulates a successful submit and logs the data
- * to the browser console — handy while you're building the page.
+ * Where submissions are sent: your Google Apps Script web app URL (ends with /exec).
+ * Set REACT_APP_FORM_ENDPOINT in .env. If it's empty, the form only pretends to send
+ * and logs the data to the browser console — handy while you're building the page.
  */
 const ENDPOINT = process.env.REACT_APP_FORM_ENDPOINT;
 
+/**
+ * Optional bot check: set REACT_APP_TURNSTILE_SITE_KEY in .env to your Cloudflare
+ * Turnstile site key. It stays invisible unless Cloudflare suspects a bot.
+ */
+const TURNSTILE_SITE_KEY = process.env.REACT_APP_TURNSTILE_SITE_KEY;
+const TURNSTILE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const TURNSTILE_ACTION = "request-demo"; // must match TURNSTILE_ACTION in Code.gs
+
 const INPUT_FIELDS = [
-  { name: "name", type: "text", placeholder: "Enter your name", autoComplete: "name" },
-  { name: "email", type: "email", placeholder: "Enter your email", autoComplete: "email" },
-  { name: "phone", type: "tel", placeholder: "Enter your phone", autoComplete: "tel" },
+  { name: "name", type: "text", placeholder: "Enter your name", autoComplete: "name", maxLength: 100 },
+  { name: "email", type: "email", placeholder: "Enter your email", autoComplete: "email", maxLength: 254 },
+  { name: "phone", type: "tel", placeholder: "Enter your phone", autoComplete: "tel", maxLength: 30 },
 ];
+const MESSAGE_MAX_LENGTH = 2000;
 
 const INITIAL_VALUES = {
   name: "",
@@ -21,6 +29,15 @@ const INITIAL_VALUES = {
   phone: "",
   message: "",
   _gotcha: "", // hidden honeypot field to catch spam bots
+};
+
+const ERROR_MESSAGES = {
+  rate_limited: "We've already received several requests. Please try again later.",
+  captcha: "We couldn't confirm you're not a bot. Please try again.",
+  captcha_pending:
+    "Just a moment, we're checking you're not a bot. Press Submit again in a few seconds. If this keeps happening, refresh the page.",
+  invalid: "Please check your details and try again.",
+  default: "Something went wrong sending your request. Please try again in a moment.",
 };
 
 function validate(values) {
@@ -41,15 +58,76 @@ function validate(values) {
   return errors;
 }
 
+// Loads the Cloudflare Turnstile script once, the first time it's needed.
+let turnstileLoader;
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (!turnstileLoader) {
+    turnstileLoader = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = TURNSTILE_SCRIPT;
+      script.async = true;
+      script.onload = () =>
+        window.turnstile ? resolve(window.turnstile) : reject(new Error("Turnstile unavailable"));
+      script.onerror = () => {
+        turnstileLoader = undefined;
+        script.remove();
+        reject(new Error("Turnstile failed to load"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return turnstileLoader;
+}
+
+function TurnstileWidget({ onToken }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    let widgetId;
+    let active = true;
+    onToken("");
+
+    loadTurnstile()
+      .then((turnstile) => {
+        if (!active || !containerRef.current) return;
+        widgetId = turnstile.render(containerRef.current, {
+          sitekey: TURNSTILE_SITE_KEY,
+          action: TURNSTILE_ACTION,
+          appearance: "interaction-only",
+          callback: (token) => onToken(token),
+          "expired-callback": () => onToken(""),
+          "error-callback": () => onToken(""),
+        });
+      })
+      .catch((error) => console.error("[RequestDemoForm]", error));
+
+    return () => {
+      active = false;
+      if (widgetId !== undefined && window.turnstile) window.turnstile.remove(widgetId);
+    };
+  }, [onToken]);
+
+  return <div ref={containerRef} className="rdf-turnstile" />;
+}
+
 export default function RequestDemoForm() {
   const [values, setValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState("idle"); // idle | submitting | success | error
+  const [errorCode, setErrorCode] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   function handleChange(event) {
     const { name, value } = event.target;
     setValues((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: undefined }));
+  }
+
+  function showError(code) {
+    setErrorCode(code || "");
+    setStatus("error");
   }
 
   async function handleSubmit(event) {
@@ -70,28 +148,41 @@ export default function RequestDemoForm() {
       return;
     }
 
+    if (TURNSTILE_SITE_KEY && ENDPOINT && !turnstileToken) {
+      showError("captcha_pending");
+      return;
+    }
+
     setStatus("submitting");
 
-    const { _gotcha, ...payload } = values;
-    const data = {
-      ...payload,
-      submittedAt: new Date().toISOString(),
+    const payload = {
+      name: values.name.trim(),
+      email: values.email.trim(),
+      phone: values.phone.trim(),
+      message: values.message.trim(),
+      _gotcha: values._gotcha,
       page: window.location.href,
+      turnstileToken,
     };
 
     try {
       if (ENDPOINT) {
         const response = await fetch(ENDPOINT, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(data),
+          // Sent as text/plain so the browser makes a "simple" request.
+          // Google Apps Script can't answer the extra CORS check that application/json triggers.
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
         });
-        if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result || result.ok !== true) {
+          const error = new Error("Request was not accepted");
+          error.code = result && result.error;
+          throw error;
+        }
       } else {
-        console.info("[RequestDemoForm] No REACT_APP_FORM_ENDPOINT set. Data:", data);
+        const { turnstileToken: _unused, ...preview } = payload;
+        console.info("[RequestDemoForm] No REACT_APP_FORM_ENDPOINT set. Data:", preview);
         await new Promise((resolve) => setTimeout(resolve, 800));
       }
 
@@ -99,7 +190,9 @@ export default function RequestDemoForm() {
       setValues(INITIAL_VALUES);
     } catch (error) {
       console.error("[RequestDemoForm]", error);
-      setStatus("error");
+      showError(error.code);
+      // Bot-check tokens can only be used once, so get a fresh one for the next try.
+      if (TURNSTILE_SITE_KEY) setTurnstileKey((key) => key + 1);
     }
   }
 
@@ -141,6 +234,7 @@ export default function RequestDemoForm() {
               placeholder={field.placeholder}
               aria-label={field.placeholder}
               autoComplete={field.autoComplete}
+              maxLength={field.maxLength}
               className="rdf-input"
               value={values[field.name]}
               onChange={handleChange}
@@ -163,11 +257,16 @@ export default function RequestDemoForm() {
             rows={4}
             placeholder="Enter your message"
             aria-label="Enter your message"
+            maxLength={MESSAGE_MAX_LENGTH}
             className="rdf-input rdf-textarea"
             value={values.message}
             onChange={handleChange}
             disabled={isSubmitting}
           />
+          {/* Bot check: invisible unless Cloudflare needs the visitor to tick a box */}
+          {TURNSTILE_SITE_KEY && ENDPOINT && (
+            <TurnstileWidget key={turnstileKey} onToken={setTurnstileToken} />
+          )}
         </div>
 
         {/* Honeypot: hidden from people, bots tend to fill it in */}
@@ -184,8 +283,7 @@ export default function RequestDemoForm() {
 
         {status === "error" && (
           <p className="rdf-banner" role="alert">
-            Something went wrong sending your request. Please try again in a
-            moment.
+            {ERROR_MESSAGES[errorCode] || ERROR_MESSAGES.default}
           </p>
         )}
 
